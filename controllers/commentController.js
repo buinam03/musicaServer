@@ -1,14 +1,23 @@
 const { Comment, User, Song } = require('../models/relationships');
 
 const getAllComment = async (req, res) => {
+    const id = req.params.id;
     try {
-        const comment = await Comment.findAll();
+        const comment = await Comment.findAll(
+            {
+                where: {song_id : id},
+                include: {
+                    model: User,
+                    attributes: ['id','username','profile_picture'],
+                }
+            }
+        );
         if (comment.length === 0) {
             return res.status(404).json({ message: 'No comment found' });
         }
-        res.json(comment)
+        res.status(200).json({message: 'success',data: comment});
     } catch (error) {
-        res.status(500).json({ message: 'Error when get comment' });
+        res.status(500).json({ message: 'Error when get comment',error: error });
     }
 }
 
@@ -30,14 +39,15 @@ const addNewCommentToSong = async (req, res) => {
                 user_id: user_id,
                 content: content,
                 parent_id: null || parent_id,
-            },
-                {
-                    where: { song_id: id }
-                })
+            })
 
             const result = await Comment.findOne({ 
                 where : {song_id : id},
-                order: [['created_at','ASC']],
+                include: {
+                    model: User,
+                    attributes: ['id','username','profile_picture'],
+                },
+                order: [['created_at','DESC']],
              })
 
             res.status(201).json({ message: 'Comment Success', data: result});

@@ -48,7 +48,7 @@ const savedAchievementByUser = async (req, res) => {
         res.status(201).json({message: "success!"});
         }
     } catch (error) {
-        res.status(500).json({ message: 'Error when create achievement' });
+        res.status(500).json({ message: 'Error when create achievement' ,error : error});
     }
 }
 

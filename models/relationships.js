@@ -1,7 +1,7 @@
 const User = require('../models/user');
 const Message = require('../models/message');
 const UserAchievement = require('../models/userArchievement');
-const Achievement = require('../models/archievement');
+const Achievement = require('./achievement');
 const Comment = require('../models/comment');
 const Follows = require('../models/follows');
 const Notification = require('../models/notification');
@@ -51,11 +51,13 @@ Comment.belongsTo(User,{foreignKey: 'user_id'});
 User.hasMany(Notification,{foreignKey: 'user_id'});
 Notification.belongsTo(User,{foreignKey: 'user_id'});
 
-User.hasMany(Message, { foreignKey: 'send_id'}); 
-User.hasMany(Message, { foreignKey: 'receive_id' }); 
+User.hasMany(Message, { as: 'sender',   foreignKey: 'send_id'   });
+User.hasMany(Message, { as: 'receiver', foreignKey: 'receive_id' });
 
-Message.belongsTo(User, { foreignKey: 'send_id'}); 
-Message.belongsTo(User, { foreignKey: 'receive_id'}); 
+Message.belongsTo(User, { as: 'sender',   foreignKey: 'send_id' });
+Message.belongsTo(User, { as: 'receiver', foreignKey: 'receive_id' });
+
+
 
 
 //Song vs Playlist

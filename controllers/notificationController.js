@@ -1,14 +1,22 @@
 const Notification = require('../models/notification');
+const User = require('../models/user');
 
 const getAllNotification = async(req,res) =>{
     try {
-        const notification = await Notification.findAll();
+        const id = req.user.id;
+        const notification = await Notification.findAll({
+            where : {user_id : id},
+            include : [{
+                model: User,
+                attributes: ['username' , 'profile_picture']
+            }]
+        });
         if(notification.length === 0){
             return res.status(404).json({ message: 'No notification found' });
         }
-        res.json(notification)
+        res.status(200).json({message: 'Success',data:notification});
     } catch (error) {
-        res.status(500).json({ message: 'Error when get notification' });
+        res.status(500).json({ message: 'Error when get notification' ,error: error});
     }
 }
 

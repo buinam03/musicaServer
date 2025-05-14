@@ -1,11 +1,11 @@
 const { Song, User, SongDetail, SongArtist, UserSongLog } = require('../models/relationships');
-
+const cloudinary = require('../config/cloudinaryConfig');
 const { Op, where, literal } = require('sequelize'); //toan tu sequelize
 
 const getAllSong = async (req, res) => {
 
     try {
-        const { UserId } = req.body;
+        const UserId = req.params.id;
 
         const user = await User.findOne({
             where: { id: UserId },
@@ -21,7 +21,7 @@ const getAllSong = async (req, res) => {
             where: { uploader_id: UserId },
             include: [{
                 model: User,
-                attributes: ['username'],
+                attributes: ['id','username'],
             },
             {
                 model: SongDetail,
@@ -38,9 +38,12 @@ const getAllSong = async (req, res) => {
             ]
         });
         if (song.length === 0) {
-            return res.status(404).json({ message: 'No song found' });
+            return res.status(200).json({
+                message: "There are no songs in this playlist yet.",
+                data: []
+            });
         }
-        res.status(200).json({ data: song });
+        res.status(200).json({ data: song || [] });
     } catch (error) {
         res.status(500).json({ message: 'Error when get song', error: error });
     }
@@ -87,21 +90,20 @@ const getSongSearch = async (req, res) => {
 }
 
 const addNewSong = async (req, res) => {
-    const { artwork, title, artist, genre, bio, duration, privacy, path } = req.body;
-
+    const { artwork, title, genre, bio, duration, privacy,path } = req.body;
+    console.log({ artwork, title, genre, bio, duration, privacy ,path});
     try {
 
-        const uploaderid = await getUserIdFromUsername(artist);
+        const uploaderid = req.user.id;
+        console.log(uploaderid);
 
-        await Song.create({
+        const newSong = await Song.create({
             title,
             artwork,
             uploader_id: uploaderid,
             privacy,
             path
         });
-
-
 
         await SongDetail.create({
             song_id: newSong.id,
@@ -135,6 +137,7 @@ const addNewSong = async (req, res) => {
         return res.status(500).json({ message: 'Error when add new song', error: error });
     }
 }
+
 
 const getUserIdFromUsername = async (username) => {
     const user = await User.findOne({
@@ -249,7 +252,6 @@ const getSongRandom = async (req, res) => {
     try {
         const randomSong = await Song.findAll({
             order: literal('RAND()'),
-            limit: 3,
         })
 
         res.status(200).json({ message: '10 song random success', data: randomSong });
@@ -264,7 +266,7 @@ const getDESCSong = async (req, res) => {
             order: [['created_at', 'DESC']],
             limit: 10,
         })
-        const randomSong = song.sort(() => Math.random() - 0.5).slice(0, 10);
+        const randomSong = song.sort(() => Math.random() - 0.5).slice(0, 7);
         res.status(200).json({ message: "success", data: randomSong });
     } catch (error) {
         res.status(500).json({ message: 'Error when get ascending song', error: error });
@@ -429,7 +431,7 @@ const getSimilarSongs = async (req, res) => {
                     include: [{
                         model: SongDetail,
                         where: {
-                            genre:  {[Op.like] : `%${genre}%`},
+                            genre: { [Op.like]: `%${genre}%` },
                             song_id: { [Op.ne]: song_id }
                         },
                     }],
@@ -452,4 +454,35 @@ const getSimilarSongs = async (req, res) => {
         res.status(500).json({ message: "Error when getting song", error: error.message });
     }
 }
-module.exports = { getAllSong, getSongSearch, getSongPlay, addNewSong, updateSongById, deleteSongById, getSongRandom, getDESCSong, getSimilarSongs };
+
+const getSongById = async (req, res) => {
+    const id = req.params.id;
+    try {
+        const result = await Song.findOne({
+            where: { id: id },
+            include: [{
+                model: User,
+                attributes: ['id'],
+            },
+            {
+                model: SongDetail,
+                attributes: ['bio', 'duration', 'genre', 'likes', 'plays'],
+            },
+            {
+                model: SongArtist,
+                include: [{
+                    model: User,
+                    attributes: ['username']
+                }],
+                attributes: [],
+            }
+            ]
+        });
+        res.status(200).json({ message: 'Success', data: result });
+    } catch (error) {
+        res.status(500).json({ message: "Error when getting song", error: error.message });
+    }
+}
+
+
+module.exports = { getAllSong, getSongById, getSongSearch, getSongPlay, addNewSong, updateSongById, deleteSongById, getSongRandom, getDESCSong, getSimilarSongs };

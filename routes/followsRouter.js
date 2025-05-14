@@ -7,10 +7,11 @@ const { authMiddleware } = require("../service/authservice");
 router.get("/getAllFollow",authMiddleware,followController.getAllFollow);
 router.get("/getCountFollower/:id",authMiddleware,followController.getCountFollower);
 router.get("/getCountFollowing/:id",authMiddleware,followController.getCountFollowing);
-router.get("/getAllFollower/:id",authMiddleware,followController.getAllFollower);
+router.get("/getAllFollower",authMiddleware,followController.getAllFollower);
+router.get("/getFollowerById/:id",authMiddleware,followController.getFollowerById);
 router.get("/getAllFollowing/:id",authMiddleware,followController.getAllFollowing);
 
 //create
-router.post("/addNewFollower/:id",authMiddleware,followController.addNewFollower);
+router.post("/addNewFollower",authMiddleware,followController.addNewFollower);
 
 module.exports = router;

@@ -22,15 +22,27 @@ const User = sequelize.define('User', {
         allowNull: false
     },
     profile_picture: {
-        type: DataTypes.STRING(255),
-        allowNull: true
+        type: DataTypes.TEXT('long'),
+        allowNull: true,
     },
     header_picture: {
-        type: DataTypes.STRING(255),
-        allowNull: true
+        type: DataTypes.TEXT('long'),
+        allowNull: true,
     },
     bio: {
         type: DataTypes.TEXT,
+        allowNull: true
+    },
+    is_verified: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false
+    },
+    country: {
+        type: DataTypes.STRING(100),
+        allowNull: true
+    },
+    province: {
+        type: DataTypes.STRING(100),
         allowNull: true
     },
     created_at: {
@@ -40,16 +52,10 @@ const User = sequelize.define('User', {
     updated_at: {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW
-    },
-    is_verified: {
-        type: DataTypes.BOOLEAN,
-        defaultValue: false
-    },
-
+    }
 }, {
     tableName: 'users',
     timestamps: false
 });
-
 
 module.exports = User;

@@ -2,7 +2,6 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config();
 const RefreshTokens = require('../models/refreshtokens');
 const User = require('../models/user');
-const { use } = require('../routes/archievementRouter');
 
 const authMiddleware = (req, res, next) => {
     const token = req.header('Authorization');
@@ -19,7 +18,7 @@ const authMiddleware = (req, res, next) => {
 }
 
 const generateAccessToken = (user) => {
-    return jwt.sign(user, process.env.JWT_SECRET_KEY, { expiresIn: '35m' });
+    return jwt.sign(user, process.env.JWT_SECRET_KEY, { expiresIn: '1h' });
 }
 
 const saveRefreshTokens = async (users_id, refreshtokens) => {
@@ -63,7 +62,7 @@ const refreshAccessToken = async (req, res) => {
         const newAccessToken = jwt.sign(
             { id: user.id, username: username },
             process.env.JWT_SECRET_KEY,
-            { expiresIn: '15m' }
+            { expiresIn: '1h' }
         )
         res.json({ accessToken: newAccessToken });
     } catch (error) {

@@ -15,6 +15,10 @@ const Message = sequelize.define('Message', {
         type: DataTypes.INTEGER,
         allowNull: false
     },
+    room_id: {
+        type: DataTypes.STRING(255),
+        allowNull: false
+    },
     message: {
         type: DataTypes.TEXT,
         allowNull: false
