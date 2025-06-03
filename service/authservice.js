@@ -40,7 +40,7 @@ const generateRefreshToken = async (user) => {
     
     await saveRefreshTokens(user.id,refreshToken);
 
-    return refreshToken;
+    return refreshToken;    
 }
 
 const refreshAccessToken = async (req, res) => {

@@ -55,7 +55,7 @@ const getRandomUser = async (req, res) => {
             order: literal('RAND()'),
             limit: 12,
         })
-        res.status(200).json({ message: 'Success', data: result });
+        res.status(200).json({ message: 'Success', data: result,count : result.length });
     } catch (error) {
         res.status(500).json({ message: 'Error retrieving user', error });
     }
@@ -92,6 +92,7 @@ const loginAccount = async (req, res) => {
         const { email, password } = req.body;
 
         const findUser = await User.findOne({ where: { email } });
+        const userId = findUser.id;
         if (!findUser) {
             return res.status(404).json({ message: 'User not found' });
         }
@@ -105,7 +106,7 @@ const loginAccount = async (req, res) => {
         const refreshToken = await generateRefreshToken({ id: findUser.id, username: findUser.username });
         const accessToken = generateAccessToken({ id: findUser.id, username: findUser.username });
 
-        res.json({ accessToken, refreshToken });
+        res.json({ accessToken, refreshToken, userId});
     } catch (error) {
         console.error(error);
         return res.status(500).json({ message: 'Đăng nhập không thành công', error: error.message });

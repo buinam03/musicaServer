@@ -11,6 +11,7 @@ const SongDetail = require('../models/songdetail');
 const Song = require('../models/songs');
 const PlaylistSong = require("../models/playlistsong");
 const UserSongLog = require('../models/usersonglogs');
+const Like = require('../models/likes');
 //User vs UserArchieve
 User.hasMany(UserAchievement, { foreignKey: 'user_id' });
 UserAchievement.belongsTo(User, { foreignKey: 'user_id' });
@@ -27,6 +28,8 @@ SongDetail.belongsTo(Song, { foreignKey: 'song_id' });
 Song.hasMany(SongArtist, { foreignKey: 'song_id' });
 SongArtist.belongsTo(Song, { foreignKey: 'song_id' });
 
+SongArtist.belongsTo(User, { foreignKey: 'artist_id'});
+
 // //Song vs Comment
 Song.hasMany(Comment, { foreignKey: 'song_id' });
 Comment.belongsTo(Song, { foreignKey: 'song_id' });
@@ -40,8 +43,10 @@ SongArtist.belongsTo(User, { foreignKey: 'artist_id'});
 User.hasMany(SongArtist, { foreignKey: 'artist_id' });   // Một User có thể liên kết với nhiều SongArtist
 
 //User vs Follower
-User.hasMany(Follows,{foreignKey: 'follower_id'});
-Follows.belongsTo(User,{foreignKey: 'follower_id'});
+User.hasMany(Follows, { foreignKey: 'follower_id', as: 'following' });
+User.hasMany(Follows, { foreignKey: 'following_id', as: 'followers' });
+Follows.belongsTo(User, { foreignKey: 'follower_id', as: 'follower' });
+Follows.belongsTo(User, { foreignKey: 'following_id', as: 'following' });
 
 //User vs Comment
 User.hasMany(Comment,{foreignKey: 'user_id'});
@@ -57,9 +62,12 @@ User.hasMany(Message, { as: 'receiver', foreignKey: 'receive_id' });
 Message.belongsTo(User, { as: 'sender',   foreignKey: 'send_id' });
 Message.belongsTo(User, { as: 'receiver', foreignKey: 'receive_id' });
 
+User.hasMany(Like, {foreignKey : 'user_id'});
+Like.belongsTo(User,{foreignKey : 'user_id'});
 
-
-
+Song.hasMany(Like, {foreignKey : 'song_id'});
+Like.belongsTo(Song, {foreignKey : 'song_id'});
+ 
 //Song vs Playlist
 Playlist.belongsToMany(Song,{
     through : 'PlaylistSong',
@@ -88,7 +96,7 @@ Song.belongsToMany(User, {
 
 
 module.exports = {
-    User,
+        User,
     UserAchievement,
     Achievement,
     Comment,
@@ -100,5 +108,6 @@ module.exports = {
     Song,
     PlaylistSong,
     Message,
-    UserSongLog
+    UserSongLog,
+    Like
 }

@@ -9,7 +9,8 @@ const getAllNotification = async(req,res) =>{
             include : [{
                 model: User,
                 attributes: ['username' , 'profile_picture']
-            }]
+            }],
+            order: [['created_at', 'DESC']]
         });
         if(notification.length === 0){
             return res.status(404).json({ message: 'No notification found' });

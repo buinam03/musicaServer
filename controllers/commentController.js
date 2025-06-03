@@ -2,6 +2,7 @@ const { Comment, User, Song } = require('../models/relationships');
 
 const getAllComment = async (req, res) => {
     const id = req.params.id;
+    const {time} = req.query;
     try {
         const comment = await Comment.findAll(
             {
@@ -9,7 +10,8 @@ const getAllComment = async (req, res) => {
                 include: {
                     model: User,
                     attributes: ['id','username','profile_picture'],
-                }
+                },
+                order: [['created_at',`${time}`]],
             }
         );
         if (comment.length === 0) {

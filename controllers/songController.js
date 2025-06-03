@@ -1,7 +1,54 @@
 const { Song, User, SongDetail, SongArtist, UserSongLog } = require('../models/relationships');
 const cloudinary = require('../config/cloudinaryConfig');
 const { Op, where, literal } = require('sequelize'); //toan tu sequelize
+const { response } = require('express');
 
+
+const getSongByUser = async (req, res) => {
+    try {
+        const UserId = req.user.id;
+
+        const user = await User.findOne({
+            where: { id: UserId },
+
+        });
+
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+
+        const song = await Song.findAll({
+            where: { uploader_id: UserId },
+            include: [{
+                model: User,
+                attributes: ['id', 'username'],
+            },
+            {
+                model: SongDetail,
+                attributes: ['bio', 'duration', 'genre', 'likes', 'plays'],
+            },
+            {
+                model: SongArtist,
+                include: [{
+                    model: User,
+                    attributes: ['username']
+                }],
+                attributes: [],
+            }
+            ]
+        });
+        if (song.length === 0) {
+            return res.status(200).json({
+                message: "There are no songs in this playlist yet.",
+                data: []
+            });
+        }
+        res.status(200).json({ data: song || [] });
+    } catch (error) {
+        res.status(500).json({ message: 'Error when get song', error: error });
+    }
+}
 const getAllSong = async (req, res) => {
 
     try {
@@ -21,7 +68,7 @@ const getAllSong = async (req, res) => {
             where: { uploader_id: UserId },
             include: [{
                 model: User,
-                attributes: ['id','username'],
+                attributes: ['id', 'username'],
             },
             {
                 model: SongDetail,
@@ -51,16 +98,15 @@ const getAllSong = async (req, res) => {
 
 const getSongSearch = async (req, res) => {
     try {
-        const { key } = req.body;
+        const { key } = req.query;
 
-
-        const song = await Song.findAll({
+        // Search for songs
+        const songs = await Song.findAll({
             where: {
                 [Op.or]: [
                     { title: { [Op.like]: `%${key}%` } },
                     { '$SongArtists.User.username$': { [Op.like]: `%${key}%` } }
                 ]
-
             },
             include: [
                 {
@@ -69,29 +115,51 @@ const getSongSearch = async (req, res) => {
                 },
                 {
                     model: SongArtist,
-                    attributes: [],
-                    include: [{
-                        model: User,
-                        attributes: ['username']
-                    }],
-
+                    attributes: ['id'], // Hoặc bỏ qua để truy vấn tất cả thuộc tính
+                    include: [
+                        {
+                            model: User,
+                            attributes: ['id', 'username', 'profile_picture','is_verified'], // Thêm thuộc tính bạn cần
+                        }
+                    ],
                 }
             ],
         });
-        if (song.length === 0) {
-            return res.status(404).json({ message: 'No song found' });
-        }
-        res.status(200).json({ data: song });
+        // Search for users
+        const users = await User.findAll({
+            where: {
+                username: { [Op.like]: `%${key}%` }
+            },
+            attributes: ['id', 'username', 'profile_picture','is_verified'],
+        });
 
+        // If no results found
+        if (songs.length === 0 && users.length === 0) {
+            return res.status(404).json({ 
+                message: 'No results found',
+                data: {
+                    songs: [],
+                    users: []
+                }
+            });
+        }
+
+        // Return both songs and users in separate arrays
+        res.status(200).json({ 
+            data: {
+                songs: songs,
+                users: users
+            }
+        });
 
     } catch (error) {
-        res.status(500).json({ message: 'An error occurred while searching for songs.', error: error });
+        res.status(500).json({ message: 'An error occurred while searching.', error: error });
     }
 }
 
 const addNewSong = async (req, res) => {
-    const { artwork, title, genre, bio, duration, privacy,path } = req.body;
-    console.log({ artwork, title, genre, bio, duration, privacy ,path});
+    const { artwork, title, genre, bio, duration, privacy, path } = req.body;
+    console.log({ artwork, title, genre, bio, duration, privacy, path });
     try {
 
         const uploaderid = req.user.id;
@@ -154,11 +222,10 @@ const getUserIdFromUsername = async (username) => {
 
 const updateSongById = async (req, res) => {
     const id = req.params.id;
-    const { artwork, title, artist, genre, bio, duration, privacy, path } = req.body;
+    const { artwork, title, genre, bio, privacy } = req.body;
 
     try {
         const song = await Song.findByPk(id);
-        const uploader_idnew = await getUserIdFromUsername(artist);
 
 
         if (!song) {
@@ -168,8 +235,7 @@ const updateSongById = async (req, res) => {
             await Song.update({
                 title: title || song.title,
                 artwork: artwork || song.artwork,
-                privacy: privacy || song.privacy,
-                path: path || song.path,
+                is_public: privacy !== undefined ? privacy : song.is_public,
             },
                 {
                     where: { id: id }
@@ -180,7 +246,6 @@ const updateSongById = async (req, res) => {
             await SongDetail.update(
                 {
                     bio: bio || songDetail.bio,
-                    duration: duration || songDetail.duration,
                     genre: genre || songDetail.genre || null,
                 },
                 {
@@ -188,20 +253,6 @@ const updateSongById = async (req, res) => {
                 },
             )
         }
-
-        const songartist = await SongArtist.findAll({ where: { song_id: id } });
-
-        if (songartist) {
-            for (const artist of songartist) {
-                await SongArtist.update({
-                    artist_id: uploader_idnew || artist.artist_id,
-                },
-                    {
-                        where: { song_id: id }
-                    },)
-            }
-        }
-
 
         const result = await Song.findOne({
             where: { id: id },
@@ -238,8 +289,13 @@ const deleteSongById = async (req, res) => {
 
         await Song.destroy({
             where: { id: id },
-        })
-
+        });
+        await SongDetail.destroy({
+            where: { song_id: id }
+        });
+        await SongArtist.destroy({
+            where: { song_id: id }
+        });
         const allSong = await Song.findAll();
 
         res.status(200).json({ message: 'Delete song success!', data: allSong });
@@ -248,15 +304,103 @@ const deleteSongById = async (req, res) => {
     }
 }
 
+const getSongByDescPlays = async (req, res) => {
+    try {
+        const song = await Song.findAll({           
+            limit: 10,
+            where: {
+                path: { [Op.ne]: null },
+                is_public: true,
+            },
+            include: [{
+                model: User,
+                attributes: ['id', 'username'],
+            },
+            {
+                model: SongDetail,
+                attributes: ['bio', 'duration', 'genre', 'likes', 'plays'],
+            },
+            {
+                model: SongArtist,
+                include: [{
+                    model: User,
+                    attributes: ['username']
+                }],
+                attributes: [],
+            }
+            ],
+            order: [[SongDetail, 'plays', 'DESC']],
+        })
+        // Lọc kết quả sau khi query để chỉ lấy bài hát có plays > 0
+        const filteredSongs = song.filter(song => song.SongDetail && song.SongDetail.plays > 0);
+        res.status(200).json({ message: '10 song desc plays success', data: filteredSongs });
+    }
+    catch (error) {
+        res.status(500).json({ message: 'Error when get song by desc plays', error: error });
+    }
+}
+
 const getSongRandom = async (req, res) => {
     try {
         const randomSong = await Song.findAll({
             order: literal('RAND()'),
+            limit: 12,
+            where: {
+                path: { [Op.ne]: null }
+            },
+            include: [{
+                model: User,
+                attributes: ['id', 'username'],
+            },
+            {
+                model: SongDetail,
+                attributes: ['bio', 'duration', 'genre', 'likes', 'plays'],
+            },
+            {
+                model: SongArtist,
+                include: [{
+                    model: User,
+                    attributes: ['username']
+                }], 
+                attributes: [],
+            }
+            ],  
         })
 
         res.status(200).json({ message: '10 song random success', data: randomSong });
     } catch (error) {
         res.status(500).json({ message: 'Error when get random song', error: error });
+    }
+}
+
+const getLastestSong = async (req, res) => {
+    const id = req.params.id;
+    try {
+        const song = await Song.findAll({
+            where: { uploader_id: id },
+            include: [{
+                model: User,
+                attributes: ['id', 'username'],
+            },
+            {
+                model: SongDetail,
+                attributes: ['bio', 'duration', 'genre', 'likes', 'plays'],
+            },
+            {
+                model: SongArtist,
+                include: [{
+                    model: User,
+                    attributes: ['username']
+                }],
+                attributes: [], 
+            }
+            ],
+            order: [['created_at', 'DESC']],
+            limit: 1,
+        })
+        res.status(200).json({ message: "success", data: song });
+    } catch (error) {
+        res.status(500).json({ message: 'Error when get ascending song', error: error });
     }
 }
 
@@ -283,7 +427,9 @@ const getSongPlay = async (req, res) => {
             return res.status(404).json({ message: "Song not found" });
         }
 
-        await logUser(user_id, song_id);
+        // Get user_id from the authenticated user
+        const userId = req.user.id;
+        await logUser(userId, song_id);
 
         res.status(200).json(song);
     } catch (error) {
@@ -292,13 +438,26 @@ const getSongPlay = async (req, res) => {
     }
 }
 
-const logUser = async (user_id, song_id) => {
+const logUser = async (req, res) => {
     try {
-        const [userLog, created] = await UserSongLog.findOrCreate({
-            where: { user_id, song_id },
-            defaults: { listen_count: 1 }
-        });
+        const { user_id, song_id } = req.body;
+        // Debug log
+        console.log('Logging values:', { user_id, song_id });
 
+        // Ensure we have valid integers
+        if (!user_id || !song_id) {
+            console.error('Missing values:', { user_id, song_id });
+            throw new Error('Missing user_id or song_id');
+        }
+
+        const [userLog, created] = await UserSongLog.findOrCreate({
+            where: { 
+                user_id: Number(user_id), 
+                song_id: Number(song_id) 
+            },
+            defaults: { listen_count: 1 }
+        }); 
+ 
         if (!created) {
             userLog.listen_count += 1;
             await userLog.save();
@@ -311,7 +470,7 @@ const logUser = async (user_id, song_id) => {
 
 
 const getSimilarSongs = async (req, res) => {
-    const { song_id, user_id } = req.body;
+    const { song_id, user_id } = req.query;
     try {
         const getLog = await UserSongLog.findOne({
             where: { song_id: song_id, user_id: user_id }
@@ -322,7 +481,10 @@ const getSimilarSongs = async (req, res) => {
         else {
             if (getLog.listen_count < 5 && getLog.listen_count >= 2) {
                 const currentSong = await Song.findOne({
-                    where: { id: song_id },
+                    where: { 
+                        id: song_id,
+                        path: { [Op.ne]: null } // Kiểm tra path tồn tại
+                    },
                     include: [
                         {
                             model: SongDetail,
@@ -338,7 +500,7 @@ const getSimilarSongs = async (req, res) => {
                 });
 
                 if (!currentSong) {
-                    return res.status(404).json({ message: "Song not found" });
+                    return res.status(404).json({ message: "Song not found or has no path" });
                 }
                 const genre = currentSong.SongDetail ? currentSong.SongDetail.genre : null;
 
@@ -352,18 +514,37 @@ const getSimilarSongs = async (req, res) => {
                     });
                 }
 
+                // Lấy danh sách bài hát của cùng nghệ sĩ
                 const getSongByArtist = await Song.findAll({
+                    where: {
+                        path: { [Op.ne]: null } // Kiểm tra path tồn tại
+                    },
                     include: [{
+                        model: User,
+                        attributes: ['id', 'username'],
+                    },
+                    {
+                        model: SongDetail,
+                        attributes: ['bio', 'duration', 'genre', 'likes', 'plays'],
+                    },
+                    {
                         model: SongArtist,
-                        where: {
-                            artist_id: artist_id,
-                            song_id: { [Op.ne]: song_id }
-                        },
-                    }],
-                    limit: 3,
+                        include: [{
+                            model: User,
+                            attributes: ['username']
+                        }],
+                        attributes: [],
+                    }
+                    ],
+                    limit: 12,
                     distinct: true
-                })
+                });
+
+                // Lấy danh sách bài hát cùng thể loại
                 const getRandomSongByGenre = await Song.findAll({
+                    where: {
+                        path: { [Op.ne]: null } // Kiểm tra path tồn tại
+                    },
                     include: [{
                         model: SongDetail,
                         where: {
@@ -373,21 +554,25 @@ const getSimilarSongs = async (req, res) => {
                     }],
                     limit: 3,
                     distinct: true
-                })
+                });
 
+                // Kết hợp và loại bỏ trùng lặp
                 const combinedRes = [...new Map([...getSongByArtist, ...getRandomSongByGenre].map(item => [item.id, item])).values()];
 
-                //Fisher-Yates Shuffle
+                // Fisher-Yates Shuffle
                 for (let i = combinedRes.length - 1; i > 0; i--) {
                     const j = Math.floor(Math.random() * (i + 1));
-                    [combinedRes[i], combinedRes[j]] = [combinedRes[j], combinedRes[j]];
+                    [combinedRes[i], combinedRes[j]] = [combinedRes[j], combinedRes[i]];
                 }
 
                 res.status(200).json({ message: "Success", data: combinedRes });
             }
             if (getLog.listen_count > 5) {
                 const currentSong = await Song.findOne({
-                    where: { id: song_id },
+                    where: { 
+                        id: song_id,
+                        path: { [Op.ne]: null } // Kiểm tra path tồn tại
+                    },
                     include: [
                         {
                             model: SongDetail,
@@ -403,7 +588,7 @@ const getSimilarSongs = async (req, res) => {
                 });
 
                 if (!currentSong) {
-                    return res.status(404).json({ message: "Song not found" });
+                    return res.status(404).json({ message: "Song not found or has no path" });
                 }
                 const genre = currentSong.SongDetail ? currentSong.SongDetail.genre : null;
 
@@ -417,17 +602,36 @@ const getSimilarSongs = async (req, res) => {
                     });
                 }
 
+                // Lấy danh sách bài hát của cùng nghệ sĩ
                 const getSongByArtist = await Song.findAll({
+                    where: {
+                        path: { [Op.ne]: null } // Kiểm tra path tồn tại
+                    },
                     include: [{
+                        model: User,
+                        attributes: ['id', 'username'],
+                    },
+                    {
+                        model: SongDetail,
+                        attributes: ['bio', 'duration', 'genre', 'likes', 'plays'],
+                    },
+                    {
                         model: SongArtist,
-                        where: {
-                            artist_id: artist_id,
-                            song_id: { [Op.ne]: song_id }
-                        },
-                    }],
-                    limit: 5,
-                })
+                        include: [{
+                            model: User,
+                            attributes: ['username']
+                        }],
+                        attributes: [],
+                    }
+                    ],
+                    distinct: true
+                });
+
+                // Lấy danh sách bài hát cùng thể loại
                 const getRandomSongBySubGenre = await Song.findAll({
+                    where: {
+                        path: { [Op.ne]: null } // Kiểm tra path tồn tại
+                    },
                     include: [{
                         model: SongDetail,
                         where: {
@@ -436,14 +640,16 @@ const getSimilarSongs = async (req, res) => {
                         },
                     }],
                     limit: 5,
-                })
+                    distinct: true
+                });
 
+                // Kết hợp và loại bỏ trùng lặp
                 const combinedRes = [...new Map([...getSongByArtist, ...getRandomSongBySubGenre].map(item => [item.id, item])).values()];
 
-                //Fisher-Yates Shuffle
+                // Fisher-Yates Shuffle
                 for (let i = combinedRes.length - 1; i > 0; i--) {
                     const j = Math.floor(Math.random() * (i + 1));
-                    [combinedRes[i], combinedRes[j]] = [combinedRes[j], combinedRes[j]];
+                    [combinedRes[i], combinedRes[j]] = [combinedRes[j], combinedRes[i]];
                 }
 
                 res.status(200).json({ message: "Success > 5", data: combinedRes });
@@ -483,6 +689,48 @@ const getSongById = async (req, res) => {
         res.status(500).json({ message: "Error when getting song", error: error.message });
     }
 }
+const getMostListenTrack = async (req, res) => {
+    const userId = req.params.id;
+    try {
+        const response = await Song.findAll({
+            where: { 
+                uploader_id: userId,
+                path: { [Op.ne]: null },
+                is_public: true
+            },
+            include: [{
+                model: User,
+                attributes: ['id', 'username'],
+            },
+            {
+                model: SongDetail,
+                attributes: ['bio', 'duration', 'genre', 'likes', 'plays'],
+            },
+            {
+                model: SongArtist,
+                include: [{
+                    model: User,
+                    attributes: ['username']
+                }],
+                attributes: [],
+            }
+            ],
+            order: [[SongDetail, 'plays', 'DESC']],
+            limit: 2
+        })
 
+        // Lọc và sắp xếp lại kết quả để đảm bảo lấy bài có plays cao nhất
+        const sortedSongs = response
+            .filter(song => song.SongDetail && song.SongDetail.plays > 0)
+            .sort((a, b) => b.SongDetail.plays - a.SongDetail.plays);
 
-module.exports = { getAllSong, getSongById, getSongSearch, getSongPlay, addNewSong, updateSongById, deleteSongById, getSongRandom, getDESCSong, getSimilarSongs };
+        res.status(200).json({ 
+            message: 'Success', 
+            data: sortedSongs.length > 0 ? [sortedSongs[0]] : [] 
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Error when getting song", error: error.message });
+    }
+}
+
+module.exports = {logUser, getMostListenTrack, getSongByUser, getLastestSong, getAllSong, getSongById, getSongSearch, getSongPlay, addNewSong, updateSongById, deleteSongById, getSongRandom, getDESCSong, getSimilarSongs, getSongByDescPlays };

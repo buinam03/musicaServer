@@ -29,6 +29,7 @@ const commentRoute = require('../routes/commentRouter');
 const messageRoute = require('../routes/messageRouter');
 const archievementRoute = require('../routes/achievementRouter');
 const authRoute = require('../routes/authRouter');
+const likeRoute = require('../routes/likeRouter');
 
 //model Message
 const {Message} = require('../models/relationships');
@@ -57,6 +58,7 @@ app.use("/api/comment", commentRoute);
 app.use("/api/archievement", archievementRoute);
 app.use("/api/message", messageRoute);
 app.use("/api/auth", authRoute);
+app.use("/api/like", likeRoute);
 
 // Socket.io logic
 io.on('connection', async (socket) => {
