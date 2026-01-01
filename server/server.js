@@ -6,17 +6,17 @@ const express = require("express");
 const http = require('http');
 const { Server } = require('socket.io');
 
-// Khởi tạo app trước khi sử dụng
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: "http://localhost:8080",
-    methods: ["GET", "POST", "PUT", "DELETE"]
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true
   }
 });
 
-// Các route imports
+// Import routes
 const userRoute = require("../routes/userRouter");
 const userArchievementRoute = require("../routes/userArchievementRouter");
 const songRoute = require('../routes/songRouter');
@@ -31,18 +31,21 @@ const archievementRoute = require('../routes/achievementRouter');
 const authRoute = require('../routes/authRouter');
 const likeRoute = require('../routes/likeRouter');
 
-//model Message
-const {Message} = require('../models/relationships');
+// Import models
+const { Message } = require('../models/relationships');
+const { User } = require('../models/relationships'); // Cần import User model
+
 // Middleware
 app.use(cors({
   origin: 'http://localhost:8080',
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true
 }));
 app.use(express.static("public"));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(express.json({ limit: '10mb' }));
 
-// Kết nối database
+// Connect database
 conn();
 
 // Routes
@@ -60,58 +63,84 @@ app.use("/api/message", messageRoute);
 app.use("/api/auth", authRoute);
 app.use("/api/like", likeRoute);
 
-// Socket.io logic
-io.on('connection', async (socket) => {
-  console.log('a user connected : ', socket.id);
+// Socket.io - Real-time messaging
+io.on('connection', (socket) => {
+  console.log('👤 User connected:', socket.id);
 
-  // Tham gia phòng chat
+  // Join room
   socket.on('room', (roomId) => {
     socket.join(roomId);
-    console.log(`User joined room: ${roomId}`);
+    console.log(`🚪 Socket ${socket.id} joined room: ${roomId}`);
   });
 
-  // Gửi tin nhắn
+  // Send message
   socket.on("send", async (data) => {
-    console.log(data);
+    console.log('📨 Received send event:', data);
+    
     try {
+      // Validate data
+      if (!data.senderId || !data.receiverId || !data.room || !data.msg) {
+        throw new Error('Missing required fields');
+      }
 
-      // 1. Lưu tin nhắn vào database
+      // Save message to database
       const newMessage = await Message.create({
-        send_id: data.senderId,    // ID người gửi (client cần gửi lên)
-        receive_id: data.receiverId, // ID người nhận
+        send_id: data.senderId,
+        receive_id: data.receiverId,
         room_id: data.room,
         message: data.msg
       });
 
-      // Gửi lại cho chính người gửi (để hiển thị ngay lập tức)
-      socket.emit('receive', {
-        id: newMessage.id,         // ID tin nhắn từ database
-        senderId: data.senderId,
-        message: data.msg,
-        room_id: data.room,
-        createdAt: newMessage.created_at
+      console.log('💾 Message saved to DB:', newMessage.id);
+
+      // Get sender info (with profile picture)
+      const sender = await User.findByPk(data.senderId, {
+        attributes: ['id', 'username', 'profile_picture']
       });
 
-      // Gửi cho các user khác trong phòng
-      socket.to(data.room).emit('receive', {
+      if (!sender) {
+        throw new Error('Sender not found');
+      }
+
+      // Create message payload with proper structure
+      const messagePayload = {
         id: newMessage.id,
-        senderId: data.senderId,
-        message: data.msg,
-        room_id: data.room,
-        createdAt: newMessage.created_at
-      });
+        sender: {
+          id: sender.id,
+          username: sender.username,
+          profile_picture: sender.profile_picture
+        },
+        message: newMessage.message,
+        room_id: newMessage.room_id,
+        created_at: newMessage.created_at
+      };
+
+      // Emit to ALL users in the room (including sender)
+      io.to(data.room).emit('receive', messagePayload);
+      
+      console.log('✅ Message broadcasted to room:', data.room);
+      
     } catch (error) {
-      console.error('Lỗi khi lưu tin nhắn:', error);
-      // Gửi thông báo lỗi về client
+      console.error('❌ Error in send event:', error);
+      
+      // Send error back to sender only
       socket.emit('messageError', {
         error: 'Không thể gửi tin nhắn',
         details: error.message
       });
     }
   });
+
+  // Disconnect
+  socket.on('disconnect', () => {
+    console.log('👋 User disconnected:', socket.id);
+  });
 });
 
 const PORT = process.env.PORT || 3000;
 
-// Lưu ý: Sử dụng server.listen thay vì app.listen
-server.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
+// Use server.listen instead of app.listen
+server.listen(PORT, () => {
+  console.log(`🚀 Server is running on port ${PORT}`);
+  console.log(`🔌 Socket.IO is ready`);
+});

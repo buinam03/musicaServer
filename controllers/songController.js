@@ -2,7 +2,7 @@ const { Song, User, SongDetail, SongArtist, UserSongLog } = require('../models/r
 const cloudinary = require('../config/cloudinaryConfig');
 const { Op, where, literal } = require('sequelize'); //toan tu sequelize
 const { response } = require('express');
-
+const { addSongToPlaylistCMSByGenre, removeSongFromPlaylistCMSByGenre } = require('./playlistController');
 
 const getSongByUser = async (req, res) => {
     try {
@@ -185,6 +185,12 @@ const addNewSong = async (req, res) => {
             artist_id: uploaderid,
         });
 
+        // Convert genre sang số để tìm playlist CMS theo idGenre
+        const idGenre = genre ? parseInt(genre) : null;
+        if (idGenre) {
+            await addSongToPlaylistCMSByGenre(idGenre, newSong.id);
+        }
+
         const result = await Song.findOne({
             where: { id: newSong.id },
             include: [
@@ -227,31 +233,57 @@ const updateSongById = async (req, res) => {
     try {
         const song = await Song.findByPk(id);
 
-
         if (!song) {
             return res.status(404).json({ message: 'Song not found ' });
         }
-        else {
-            await Song.update({
-                title: title || song.title,
-                artwork: artwork || song.artwork,
-                is_public: privacy !== undefined ? privacy : song.is_public,
-            },
-                {
-                    where: { id: id }
-                },)
-        }
+
+        // Lấy genre cũ trước khi update
         const songDetail = await SongDetail.findOne({ where: { song_id: id } });
+        const oldGenre = songDetail ? songDetail.genre : null;
+        
+        // Convert genre sang số nếu có giá trị mới
+        let newGenre = oldGenre; // Giữ nguyên genre cũ nếu không có giá trị mới
+        if (genre !== undefined && genre !== null) {
+            const parsedGenre = parseInt(genre);
+            newGenre = !isNaN(parsedGenre) ? parsedGenre : null;
+        }
+
+        // Update song
+        await Song.update({
+            title: title || song.title,
+            artwork: artwork || song.artwork,
+            is_public: privacy !== undefined ? privacy : song.is_public,
+        },
+            {
+                where: { id: id }
+            })
+
+        // Update song detail
         if (songDetail) {
             await SongDetail.update(
                 {
                     bio: bio || songDetail.bio,
-                    genre: genre || songDetail.genre || null,
+                    genre: newGenre,
                 },
                 {
                     where: { song_id: id }
                 },
             )
+        }
+
+        // Xử lý thay đổi playlist CMS nếu genre thay đổi
+        if (oldGenre !== null && newGenre !== null && oldGenre !== newGenre) {
+            // Xóa khỏi playlist CMS cũ
+            await removeSongFromPlaylistCMSByGenre(oldGenre, id);
+
+            // Thêm vào playlist CMS mới
+            await addSongToPlaylistCMSByGenre(newGenre, id);
+        } else if (oldGenre === null && newGenre !== null) {
+            // Nếu trước đó không có genre, bây giờ có genre mới thì thêm vào playlist
+            await addSongToPlaylistCMSByGenre(newGenre, id);
+        } else if (oldGenre !== null && newGenre === null) {
+            // Nếu trước đó có genre, bây giờ xóa genre thì xóa khỏi playlist
+            await removeSongFromPlaylistCMSByGenre(oldGenre, id);
         }
 
         const result = await Song.findOne({
@@ -472,11 +504,105 @@ const logUser = async (req, res) => {
 const getSimilarSongs = async (req, res) => {
     const { song_id, user_id } = req.query;
     try {
-        const getLog = await UserSongLog.findOne({
-            where: { song_id: song_id, user_id: user_id }
-        })
+        // Nếu không có song_id, chỉ trả về random songs
+        if (!song_id) {
+            const randomSongs = await Song.findAll({
+                where: {
+                    path: { [Op.ne]: null } // Chỉ lấy songs có path
+                },
+                include: [{
+                    model: User,
+                    attributes: ['id', 'username'],
+                },
+                {
+                    model: SongDetail,
+                    attributes: ['bio', 'duration', 'genre', 'likes', 'plays'],
+                    required: true
+                },
+                {
+                    model: SongArtist,
+                    include: [{
+                        model: User,
+                        attributes: ['username']
+                    }],
+                    attributes: [],
+                    required: true
+                }
+                ],
+                limit: 20, // Lấy 20 bài để shuffle
+                distinct: true,
+                order: literal('RAND()') // Random order từ database
+            });
+
+            // Fisher-Yates Shuffle để đảm bảo random
+            const shuffledSongs = [...randomSongs];
+            for (let i = shuffledSongs.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffledSongs[i], shuffledSongs[j]] = [shuffledSongs[j], shuffledSongs[i]];
+            }
+
+            // Giới hạn số lượng trả về
+            const finalSongs = shuffledSongs.slice(0, 15);
+
+            return res.status(200).json({ 
+                message: "Success - Random songs (no song_id provided)", 
+                data: finalSongs 
+            });
+        }
+
+        // Nếu có song_id, tìm log (nếu có user_id)
+        let getLog = null;
+        if (user_id) {
+            getLog = await UserSongLog.findOne({
+                where: { song_id: song_id, user_id: user_id }
+            });
+        }
+
         if (!getLog) {
-            return res.status(404).json({ message: "Log not found " });
+            // Khi chưa có log, trả về random songs cho người dùng (loại trừ song hiện tại)
+            const randomSongs = await Song.findAll({
+                where: {
+                    path: { [Op.ne]: null }, // Chỉ lấy songs có path
+                    id: { [Op.ne]: song_id } // Loại trừ song hiện tại
+                },
+                include: [{
+                    model: User,
+                    attributes: ['id', 'username'],
+                },
+                {
+                    model: SongDetail,
+                    attributes: ['bio', 'duration', 'genre', 'likes', 'plays'],
+                    required: true
+                },
+                {
+                    model: SongArtist,
+                    include: [{
+                        model: User,
+                        attributes: ['username']
+                    }],
+                    attributes: [],
+                    required: true
+                }
+                ],
+                limit: 20, // Lấy 20 bài để shuffle
+                distinct: true,
+                order: literal('RAND()') // Random order từ database
+            });
+
+            // Fisher-Yates Shuffle để đảm bảo random
+            const shuffledSongs = [...randomSongs];
+            for (let i = shuffledSongs.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffledSongs[i], shuffledSongs[j]] = [shuffledSongs[j], shuffledSongs[i]];
+            }
+
+            // Giới hạn số lượng trả về
+            const finalSongs = shuffledSongs.slice(0, 15);
+
+            return res.status(200).json({ 
+                message: "Success - Random songs", 
+                data: finalSongs 
+            });
         }
         else {
             if (getLog.listen_count < 5 && getLog.listen_count >= 2) {

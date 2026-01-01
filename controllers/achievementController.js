@@ -12,4 +12,14 @@ const getAllAchievement = async (req, res) => {
     }
 };
 
-module.exports = { getAllAchievement };
+const createAchievement = async (req, res) => {
+    try {
+        const { userId, name, description, condition_type, condition_value } = req.body;
+        const achievement = await Achievement.create({ userId, name, description, condition_type, condition_value });
+        res.json({message: 'Achievement created successfully', data: achievement, statusCode: 201});
+    } catch (error) {
+        res.status(500).json({ message: 'Error when create achievement' ,error: error});
+    }
+}
+
+module.exports = { getAllAchievement,createAchievement };
