@@ -20,7 +20,7 @@ const SongDetail = sequelize.define('SongDetail', {
         allowNull: false
     },
     genre: {
-        type: DataTypes.STRING(255),
+        type: DataTypes.INTEGER,
         allowNull: true
     },
     likes: {

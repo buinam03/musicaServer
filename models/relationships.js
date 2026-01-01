@@ -13,8 +13,8 @@ const PlaylistSong = require("../models/playlistsong");
 const UserSongLog = require('../models/usersonglogs');
 const Like = require('../models/likes');
 //User vs UserArchieve
-User.hasMany(UserAchievement, { foreignKey: 'user_id' });
-UserAchievement.belongsTo(User, { foreignKey: 'user_id' });
+User.hasMany(UserAchievement, { foreignKey: 'userId' });
+UserAchievement.belongsTo(User, { foreignKey: 'userId' });
 
 //User vs Song
 User.hasMany(Song, { foreignKey: 'uploader_id' }); // Một User có thể tải lên nhiều bài hát
@@ -68,6 +68,17 @@ Like.belongsTo(User,{foreignKey : 'user_id'});
 Song.hasMany(Like, {foreignKey : 'song_id'});
 Like.belongsTo(Song, {foreignKey : 'song_id'});
  
+User.hasMany(UserAchievement, {
+    foreignKey: 'userId',
+});
+UserAchievement.belongsTo(User, {
+    foreignKey: 'userId',
+});
+
+//User vs Playlist
+User.hasMany(Playlist, { foreignKey: 'creator_id', as: 'creator' });
+Playlist.belongsTo(User, { foreignKey: 'creator_id', as: 'creator' });
+
 //Song vs Playlist
 Playlist.belongsToMany(Song,{
     through : 'PlaylistSong',
@@ -76,8 +87,8 @@ Playlist.belongsToMany(Song,{
 });
 Song.belongsToMany(Playlist,{
     through : 'PlaylistSong',
-    foreignKey : 'playlist_id',
-    otherKey : 'song_id',
+    foreignKey : 'song_id',
+    otherKey : 'playlist_id',
 });
 
 //User + Song -> Log

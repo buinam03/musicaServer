@@ -2,7 +2,7 @@ const User = require('../models/user');
 // const crypt = require('bcrypt-nodejs');
 const bcrypt = require('bcrypt');
 const { generateAccessToken, generateRefreshToken } = require('../service/authservice');
-const { literal, where } = require('sequelize');
+const { literal, Op } = require('sequelize');
 
 const getAllUser = async (req, res) => {
     try {
@@ -51,7 +51,10 @@ const getCurrentUser = async (req, res) => {
 };
 const getRandomUser = async (req, res) => {
     try {
+        const currentUser = req.user.id;
+
         const result = await User.findAll({
+            where: { id: { [Op.ne]: currentUser } },
             order: literal('RAND()'),
             limit: 12,
         })

@@ -30,20 +30,33 @@ const updatePlayWhenListenSong = async (req, res) => {
         if (!song) {
             return res.status(404).json({ message: 'Song not found ' });
         }
-        else {
 
-            const songDetail = await SongDetail.findOne({ where: { song_id: id } });
-            if (!songDetail) {
-                return res.status(404).json({ message: 'Song detail not found' });
-            }
-            await SongDetail.update({
-                plays: songDetail.plays + 1
-            },
-                {
-                    where: { song_id: id }
-                }
-            )
+        const songDetail = await SongDetail.findOne({ where: { song_id: id } });
+        if (!songDetail) {
+            return res.status(404).json({ message: 'Song detail not found' });
         }
+
+        // Lấy user đang đăng nhập (nếu có)
+        const currentUserId = req.user ? req.user.id : null;
+        const uploaderId = song.uploader_id;
+
+        // Chỉ tăng lượt nghe nếu người nghe không phải là người upload
+        if (currentUserId && currentUserId === uploaderId) {
+            // Người đăng nhập đang nghe bài hát của chính họ, không tăng plays
+            return res.status(200).json({ 
+                message: 'Success (no play count increase - own song)', 
+                data: songDetail 
+            });
+        }
+
+        // Người khác nghe bài hát, tăng plays
+        await SongDetail.update({
+            plays: songDetail.plays + 1
+        },
+            {
+                where: { song_id: id }
+            }
+        )
 
         const result = await SongDetail.findOne({
             where: { song_id: id },
