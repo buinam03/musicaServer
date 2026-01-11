@@ -3,6 +3,7 @@ const User = require('../models/user');
 const bcrypt = require('bcrypt');
 const { generateAccessToken, generateRefreshToken } = require('../service/authservice');
 const { literal, Op } = require('sequelize');
+const { Follows } = require('../models/relationships');
 
 const getAllUser = async (req, res) => {
     try {
@@ -57,8 +58,35 @@ const getRandomUser = async (req, res) => {
             where: { id: { [Op.ne]: currentUser } },
             order: literal('RAND()'),
             limit: 12,
-        })
-        res.status(200).json({ message: 'Success', data: result,count : result.length });
+            include: [
+                {
+                    model: Follows,
+                    as: 'followers',
+                    where: { follower_id: currentUser },
+                    required: false
+                }
+            ]
+        });
+
+        // Add follower count for each user
+        const usersWithFollowerCount = await Promise.all(
+            result.map(async (user) => {
+                const userData = user.toJSON();
+                const followerCount = await Follows.count({
+                    where: { following_id: user.id }
+                });
+                return {
+                    ...userData,
+                    followerCount
+                };
+            })
+        );
+
+        res.status(200).json({ 
+            message: 'Success', 
+            data: usersWithFollowerCount,
+            count: usersWithFollowerCount.length 
+        });
     } catch (error) {
         res.status(500).json({ message: 'Error retrieving user', error });
     }

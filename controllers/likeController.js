@@ -58,21 +58,65 @@ const toggleLike = async (req, res) => {
     }
 };
 
-// Get like status for a song
+// Get like status for all songs
 const getLikeStatus = async (req, res) => {
     try {
-        const { user_id, song_id } = req.query;
+        const { user_id } = req.query;
 
-        const like = await Like.findOne({
+        if (!user_id) {
+            return res.status(400).json({
+                success: false,
+                message: 'user_id is required'
+            });
+        }
+
+        // Fetch all likes for this user
+        const userLikes = await Like.findAll({
             where: {
-                user_id,
-                song_id
-            }
+                user_id
+            },
+            attributes: ['song_id']
+        });
+
+        // If user has no likes, return empty array
+        if (userLikes.length === 0) {
+            return res.status(200).json({
+                success: true,
+                data: []
+            });
+        }
+
+        // Extract song IDs from likes
+        const likedSongIds = userLikes.map(like => like.song_id);
+
+        // Fetch only the songs that user has liked
+        const songs = await Song.findAll({
+            where: {
+                id: likedSongIds
+            },
+            attributes: ['id', 'title', 'is_public'],
+            include: [{
+                model: SongArtist,
+                include: [{
+                    model: User,
+                    attributes: ['id', 'username']
+                }],
+                attributes: []
+            }]
+        });
+
+        // Map songs with isLiked status (all will be true since we only fetch liked songs)
+        const songsWithLikeStatus = songs.map(song => {
+            const songData = song.toJSON();
+            return {
+                ...songData,
+                isLiked: true
+            };
         });
 
         return res.status(200).json({
             success: true,
-            isLiked: !!like
+            data: songsWithLikeStatus
         });
     } catch (error) {
         console.error('Error in getLikeStatus:', error);
