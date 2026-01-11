@@ -553,7 +553,7 @@ const getPlaylistCMS = async (req,res) => {
         if (playlists.length === 0) {
             return res.status(200).json({ message: "No playlist found", data: [] });
         }
-        const randomPlaylists = playlists.sort(() => Math.random() - 0.5).slice(0, 5);
+        const randomPlaylists = playlists.sort(() => Math.random() - 0.5);
 
         res.status(200).json({ message: "Success", data: randomPlaylists });
     } catch (error) {

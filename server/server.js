@@ -65,7 +65,6 @@ app.use("/api/like", likeRoute);
 
 // Socket.io - Real-time messaging
 io.on('connection', (socket) => {
-  console.log('👤 User connected:', socket.id);
 
   // Join room
   socket.on('room', (roomId) => {
@@ -75,8 +74,6 @@ io.on('connection', (socket) => {
 
   // Send message
   socket.on("send", async (data) => {
-    console.log('📨 Received send event:', data);
-    
     try {
       // Validate data
       if (!data.senderId || !data.receiverId || !data.room || !data.msg) {
@@ -91,7 +88,6 @@ io.on('connection', (socket) => {
         message: data.msg
       });
 
-      console.log('💾 Message saved to DB:', newMessage.id);
 
       // Get sender info (with profile picture)
       const sender = await User.findByPk(data.senderId, {
@@ -117,11 +113,9 @@ io.on('connection', (socket) => {
 
       // Emit to ALL users in the room (including sender)
       io.to(data.room).emit('receive', messagePayload);
-      
-      console.log('✅ Message broadcasted to room:', data.room);
+
       
     } catch (error) {
-      console.error('❌ Error in send event:', error);
       
       // Send error back to sender only
       socket.emit('messageError', {
@@ -133,7 +127,7 @@ io.on('connection', (socket) => {
 
   // Disconnect
   socket.on('disconnect', () => {
-    console.log('👋 User disconnected:', socket.id);
+    console.log('User disconnected:', socket.id);
   });
 });
 
@@ -141,6 +135,6 @@ const PORT = process.env.PORT || 3000;
 
 // Use server.listen instead of app.listen
 server.listen(PORT, () => {
-  console.log(`🚀 Server is running on port ${PORT}`);
-  console.log(`🔌 Socket.IO is ready`);
+  console.log(`Server is running on port ${PORT}`);
+  console.log(`Socket.IO is ready`);
 });
